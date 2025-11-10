@@ -1,7 +1,15 @@
-import React from 'react';
-import { CalendarIcon, InfoIcon, HomeIcon, PlusIcon, FileTextIcon, SunIcon } from 'lucide-react';
+import React from 'react'
+import {
+  CalendarIcon,
+  InfoIcon,
+  HomeIcon,
+  PlusIcon,
+  FileTextIcon,
+  SunIcon,
+} from 'lucide-react'
 export function App() {
-  return <div className="w-full min-h-screen bg-white relative overflow-hidden">
+  return (
+    <div className="w-full min-h-screen bg-white relative overflow-hidden">
       {/* Decorative blurred circles */}
       <div className="absolute top-20 right-10 w-20 h-20 rounded-full bg-yellow-300 blur-2xl opacity-60"></div>
       <div className="absolute top-16 right-24 w-16 h-16 rounded-full bg-blue-300 blur-2xl opacity-60"></div>
@@ -11,7 +19,11 @@ export function App() {
       {/* Header */}
       <div className="flex justify-between items-center px-6 py-4 relative z-10">
         <h1 className="text-3xl font-bold">Cortisol</h1>
-        <img src="/eli3.webp" alt="Profile" className="w-12 h-12 rounded-full object-cover" />
+        <img
+          src="https://uploadthingy.s3.us-west-1.amazonaws.com/s5r7uE4Rtenuz1GxLk8xnQ/eli3.webp"
+          alt="Profile"
+          className="w-12 h-12 rounded-full object-cover"
+        />
       </div>
       {/* Toggle buttons */}
       <div className="flex gap-2 px-6 mb-4 relative z-10">
@@ -56,23 +68,86 @@ export function App() {
           </div>
           {/* Chart area */}
           <div className="absolute left-0 right-8 top-0 bottom-6">
-            <svg className="w-full h-full" viewBox="0 0 300 200" preserveAspectRatio="none">
+            <svg
+              className="w-full h-full"
+              viewBox="0 0 300 200"
+              preserveAspectRatio="none"
+            >
               {/* Grid lines */}
-              <line x1="0" y1="0" x2="300" y2="0" stroke="#f0f0f0" strokeWidth="1" />
-              <line x1="0" y1="40" x2="300" y2="40" stroke="#f0f0f0" strokeWidth="1" />
-              <line x1="0" y1="80" x2="300" y2="80" stroke="#f0f0f0" strokeWidth="1" />
-              <line x1="0" y1="120" x2="300" y2="120" stroke="#f0f0f0" strokeWidth="1" />
-              <line x1="0" y1="160" x2="300" y2="160" stroke="#f0f0f0" strokeWidth="1" />
-              <line x1="0" y1="200" x2="300" y2="200" stroke="#f0f0f0" strokeWidth="1" />
+              <line
+                x1="0"
+                y1="0"
+                x2="300"
+                y2="0"
+                stroke="#f0f0f0"
+                strokeWidth="1"
+              />
+              <line
+                x1="0"
+                y1="40"
+                x2="300"
+                y2="40"
+                stroke="#f0f0f0"
+                strokeWidth="1"
+              />
+              <line
+                x1="0"
+                y1="80"
+                x2="300"
+                y2="80"
+                stroke="#f0f0f0"
+                strokeWidth="1"
+              />
+              <line
+                x1="0"
+                y1="120"
+                x2="300"
+                y2="120"
+                stroke="#f0f0f0"
+                strokeWidth="1"
+              />
+              <line
+                x1="0"
+                y1="160"
+                x2="300"
+                y2="160"
+                stroke="#f0f0f0"
+                strokeWidth="1"
+              />
+              <line
+                x1="0"
+                y1="200"
+                x2="300"
+                y2="200"
+                stroke="#f0f0f0"
+                strokeWidth="1"
+              />
               {/* Shaded area */}
-              <path d="M 0 10 L 50 30 L 100 60 L 150 90 L 200 120 L 250 140 L 300 160 L 300 200 L 0 200 Z" fill="#93c5fd" opacity="0.3" />
+              <path
+                d="M 0 10 L 50 30 L 100 60 L 150 90 L 200 120 L 250 140 L 300 160 L 300 200 L 0 200 Z"
+                fill="#93c5fd"
+                opacity="0.3"
+              />
               {/* Line */}
-              <path d="M 0 10 L 50 30 L 100 60 L 150 90 L 200 120 L 250 140 L 300 160" stroke="#000" strokeWidth="2" fill="none" />
+              <path
+                d="M 0 10 L 50 30 L 100 60 L 150 90 L 200 120 L 250 140 L 300 160"
+                stroke="#000"
+                strokeWidth="2"
+                fill="none"
+              />
               {/* Data points */}
               <circle cx="0" cy="10" r="4" fill="#000" />
               <circle cx="250" cy="140" r="4" fill="#000" />
               {/* Vertical line at current time */}
-              <line x1="250" y1="0" x2="250" y2="200" stroke="#666" strokeWidth="1" strokeDasharray="2,2" />
+              <line
+                x1="250"
+                y1="0"
+                x2="250"
+                y2="200"
+                stroke="#666"
+                strokeWidth="1"
+                strokeDasharray="2,2"
+              />
             </svg>
             {/* Time label */}
             <div className="absolute top-0 left-[83%] text-xs text-gray-500 -translate-x-1/2 whitespace-nowrap">
@@ -123,5 +198,6 @@ export function App() {
           <span className="text-xs mt-1">Plans</span>
         </button>
       </div>
-    </div>;
+    </div>
+  )
 }
