@@ -33,7 +33,7 @@ HormoIQ is a React Native mobile app that complements a physical saliva test kit
 
 **AI/ML:**
 - OpenAI GPT-4 API
-- API Key: Stored in `.env` file as `OPENAI_API_KEY`
+- API Key: Stored in `.env` file (OPENAI_API_KEY)
 
 **Future Integrations:**
 - Roboflow API (camera-based test scanning)
@@ -490,7 +490,6 @@ Conversational AI that knows YOUR complete hormone history and answers questions
 ```javascript
 // lib/openai.js
 import OpenAI from 'openai';
-
 import { OPENAI_API_KEY } from '@env';
 
 const openai = new OpenAI({

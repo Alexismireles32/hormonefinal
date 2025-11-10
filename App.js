@@ -12,7 +12,6 @@ import ImpactScreen from './screens/ImpactScreen';
 import AskScreen from './screens/AskScreen';
 import BioAgeScreen from './screens/BioAgeScreen';
 import UserProfileScreen from './screens/UserProfileScreen';
-import TailwindDemoScreen from './screens/TailwindDemoScreen';
 
 const Stack = createStackNavigator();
 
@@ -48,7 +47,6 @@ export default function App() {
             initialParams={{ onboarding: true }}
           />
           <Stack.Screen name="Dashboard" component={DashboardScreen} />
-          <Stack.Screen name="TailwindDemo" component={TailwindDemoScreen} />
           <Stack.Screen name="SelectHormone" component={SelectHormoneScreen} />
           <Stack.Screen name="TestInput" component={TestInputScreen} />
           <Stack.Screen name="Impact" component={ImpactScreen} />

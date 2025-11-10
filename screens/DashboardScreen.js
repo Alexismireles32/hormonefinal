@@ -1,56 +1,45 @@
-// Dashboard Screen - Complete Redesign Based on homepage.tsx
-import React, { useState, useEffect, useRef } from 'react';
-import { 
-  View, Text, StyleSheet, ScrollView, SafeAreaView, RefreshControl, 
-  TouchableOpacity, Dimensions, Animated 
-} from 'react-native';
-import Svg, { Circle } from 'react-native-svg';
+// Dashboard Screen - Home screen with empty state and floating + button
+import React, { useState, useEffect } from 'react';
+import { View, Text, StyleSheet, ScrollView, SafeAreaView, RefreshControl, TouchableOpacity, Dimensions } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { COLORS, TYPOGRAPHY, SPACING, BORDER_RADIUS, SHADOWS } from '../constants/theme';
+import FloatingButton from '../components/FloatingButton';
 import Avatar from '../components/Avatar';
 import { getHormoneTests, getTestCount } from '../utils/database';
 import { calculateAllReadyScores } from '../utils/readyScoreDatabase';
-import { calculateStreak } from '../utils/streak';
+import { calculateStreak, getStreakDisplay, getStreakPercentile } from '../utils/streak';
 import { getUserProfile } from '../utils/userProfile';
-import { calculateAndSaveBioAge } from '../utils/bioageDatabase';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
+
+// Helper functions for score coloring
+const getScoreColor = (score) => {
+  if (score >= 80) return { bg: '#D1FAE5', text: '#065F46', border: '#6EE7B7' };
+  if (score >= 60) return { bg: '#FEF3C7', text: '#92400E', border: '#FCD34D' };
+  return { bg: '#FEE2E2', text: '#991B1B', border: '#FCA5A5' };
+};
+
+const getScoreLabel = (score) => {
+  if (score >= 80) return 'Excellent';
+  if (score >= 60) return 'Good';
+  return 'Needs Attention';
+};
 
 export default function DashboardScreen({ navigation }) {
   const [testCount, setTestCount] = useState(0);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [readyScores, setReadyScores] = useState([]);
-  const [streak, setStreak] = useState(0);
-  const [recentTests, setRecentTests] = useState([]);
+  const [streakData, setStreakData] = useState(null);
+  const [lastTestDate, setLastTestDate] = useState(null);
   const [userName, setUserName] = useState('User');
-  const [bioAgeData, setBioAgeData] = useState(null);
-  
-  // Animated gradient for Ask card
-  const gradientAnimation = useRef(new Animated.Value(0)).current;
+  const [recentTests, setRecentTests] = useState([]);
 
   useEffect(() => {
     loadDashboard();
   }, []);
 
-  useEffect(() => {
-    // Start gradient animation
-    Animated.loop(
-      Animated.sequence([
-        Animated.timing(gradientAnimation, {
-          toValue: 1,
-          duration: 7500,
-          useNativeDriver: false,
-        }),
-        Animated.timing(gradientAnimation, {
-          toValue: 0,
-          duration: 7500,
-          useNativeDriver: false,
-        }),
-      ])
-    ).start();
-  }, []);
-
+  // Reload when screen comes into focus
   useEffect(() => {
     const unsubscribe = navigation.addListener('focus', () => {
       loadDashboard();
@@ -60,539 +49,461 @@ export default function DashboardScreen({ navigation }) {
 
   const loadDashboard = async () => {
     try {
-      setLoading(true);
-      
       // Load user profile
       const profile = await getUserProfile();
-      setUserName(profile.name || 'User');
-      
-      // Load test count
-      const count = await getTestCount();
-      setTestCount(count);
-      
-      // Load recent tests
-      const tests = await getHormoneTests();
-      setRecentTests(tests.slice(0, 5));
-      
-      // Load ReadyScores
-      if (count > 0) {
-        const scores = await calculateAllReadyScores();
-        setReadyScores(scores);
-      }
-      
-      // Load streak
-      if (tests.length > 0) {
-        const streakData = calculateStreak(tests);
-        setStreak(streakData.currentStreak || 0);
+      if (profile) {
+        setUserName(profile.name || 'HormoIQ User');
       }
 
-      // Load BioAge
-      if (count >= 3) {
-        const profile = await getUserProfile();
-        if (profile.age && profile.gender) {
-          const bioAge = await calculateAndSaveBioAge(profile);
-          setBioAgeData(bioAge);
+      const count = await getTestCount();
+      setTestCount(count);
+
+      // Calculate all ReadyScores if tests exist
+      if (count > 0) {
+        const tests = await getHormoneTests();
+        const scores = await calculateAllReadyScores();
+        setReadyScores(scores);
+        setRecentTests(tests.slice(0, 5)); // Store recent tests for mini metrics
+        
+        if (tests && tests.length > 0) {
+          setLastTestDate(tests[0].test_date);
+        } else {
+          setLastTestDate(null);
         }
+        
+        // Calculate streak
+        const streak = calculateStreak(tests);
+        setStreakData(streak);
+      } else {
+        setReadyScores([]);
+        setRecentTests([]);
+        setStreakData(null);
+        setLastTestDate(null);
       }
-      
     } catch (error) {
       console.error('Error loading dashboard:', error);
     } finally {
       setLoading(false);
+      setRefreshing(false);
     }
   };
 
   const handleRefresh = async () => {
     setRefreshing(true);
     await loadDashboard();
-    setRefreshing(false);
   };
 
   const handleAddTest = () => {
     navigation.navigate('SelectHormone');
   };
 
-  // Get scores
-  const primaryScore = readyScores.find(s => s.category === 'overall');
-  const physicalScore = readyScores.find(s => s.category === 'physical');
-  const mentalScore = readyScores.find(s => s.category === 'mental');
-
-  // Calculate unlock progress
+  const primaryScore = readyScores.length > 0 ? readyScores[0] : null;
+  const secondaryScores = readyScores.filter(score => score.category !== 'overall').slice(0, 2);
   const impactLocked = testCount < 15;
-  const bioAgeLocked = testCount < 3;
-  const impactRemaining = Math.max(0, 15 - testCount);
-  const bioAgeRemaining = Math.max(0, 3 - testCount);
+  const impactRemaining = impactLocked ? 15 - testCount : 0;
+  const bioAgeLocked = testCount < 10;
+  const bioAgeRemaining = bioAgeLocked ? 10 - testCount : 0;
+  const streakDetails = streakData ? getStreakDisplay(streakData.streak) : null;
+  const daysSinceLast = streakData?.daysSinceLastTest ?? null;
+  const formattedLastTest = lastTestDate
+    ? new Date(lastTestDate).toLocaleDateString(undefined, {
+        month: 'short',
+        day: 'numeric',
+      })
+    : '—';
 
-  // Calculate completed tests today (mock for now)
-  const completedToday = testCount > 0 ? Math.min(testCount, 12) : 0;
+  const nextUnlockMessage = impactLocked
+    ? `${impactRemaining} more test${impactRemaining === 1 ? '' : 's'} to unlock Impact™`
+    : bioAgeLocked
+    ? `${bioAgeRemaining} more test${bioAgeRemaining === 1 ? '' : 's'} to unlock BioAge™`
+    : 'All premium insights unlocked';
 
   return (
-    <View style={styles.container}>
-      {/* Decorative Blur Circles */}
-      <View style={styles.decorativeCircle1} />
-      <View style={styles.decorativeCircle2} />
-      <View style={styles.decorativeCircle3} />
-      <View style={styles.decorativeCircle4} />
-      <View style={styles.decorativeCircle5} />
-
+    <LinearGradient colors={COLORS.gradients.background} style={styles.gradientBackground}>
       <SafeAreaView style={styles.safeArea}>
-        {/* Header */}
-        <View style={styles.header}>
-          <View>
-            <Text style={styles.welcomeText}>Welcome back,</Text>
-            <Text style={styles.welcomeName}>{userName}</Text>
+        <View style={styles.container}>
+          {/* Header */}
+          <View style={styles.header}>
+            <View style={styles.headerContent}>
+              <View style={styles.headerLeft}>
+                <Avatar 
+                  name={userName}
+                  size={48}
+                  gradientColors={COLORS.gradients.ring}
+                />
+                <View>
+                  <Text style={styles.greeting}>Hello!</Text>
+                  <Text style={styles.appTitle}>Your Dashboard</Text>
+                </View>
+              </View>
+              <TouchableOpacity
+                style={styles.settingsButton}
+                onPress={() => navigation.navigate('UserProfile', { onboarding: false })}
+                activeOpacity={0.7}
+                accessibilityRole="button"
+                accessibilityLabel="Settings"
+                accessibilityHint="Opens user profile and settings"
+              >
+                <Text style={styles.settingsIcon}>🔔</Text>
+              </TouchableOpacity>
+            </View>
           </View>
-          <Avatar 
-            name={userName}
-            size={48}
-            gradientColors={COLORS.gradients.hero}
-          />
+
+          {/* Main Content */}
+          <ScrollView 
+            contentContainerStyle={styles.scrollContent}
+            showsVerticalScrollIndicator={false}
+            refreshControl={
+              <RefreshControl refreshing={refreshing} onRefresh={handleRefresh} />
+            }
+          >
+            {testCount === 0 ? (
+              // Empty state
+              <View style={styles.emptyState}>
+                <Text style={styles.emptyEmoji}>🧪</Text>
+                <Text style={styles.emptyTitle}>No Tests Yet</Text>
+                <Text style={styles.emptyText}>
+                  Tap the + button below to log your first hormone test
+                </Text>
+              </View>
+            ) : (
+  {/* Health Score Card - Option 1 Tech Health Design */}
+        <View style={styles.healthScoreCard}>
+          {/* Header with Title and Status Badge */}
+          <View style={styles.healthScoreHeader}>
+            <View style={styles.healthScoreTitle}>
+              <Text style={styles.activityIcon}>📊</Text>
+              <Text style={styles.healthScoreTitleText}>ReadyScore™</Text>
+            </View>
+            {primaryScore && (
+              <View style={[
+                styles.statusBadge,
+                { backgroundColor: getScoreColor(primaryScore.score).bg }
+              ]}>
+                <Text style={[
+                  styles.statusBadgeText,
+                  { color: getScoreColor(primaryScore.score).text }
+                ]}>
+                  {getScoreLabel(primaryScore.score)}
+                </Text>
+              </View>
+            )}
+          </View>
+
+          {/* Circular Progress Ring with Score */}
+          <View style={styles.circularProgressContainer}>
+            {/* Background Ring */}
+            <View style={styles.progressRingBackground}>
+              {[...Array(40)].map((_, i) => (
+                <View 
+                  key={i}
+                  style={[
+                    styles.progressDot,
+                    { 
+                      transform: [
+                        { rotate: `${i * 9}deg` },
+                        { translateY: -85 }
+                      ]
+                    }
+                  ]} 
+                />
+              ))}
+            </View>
+
+            {/* Foreground Ring (Gradient Simulation) */}
+            {primaryScore && (
+              <View style={styles.progressRingForeground}>
+                {[...Array(Math.floor((primaryScore.score / 100) * 40))].map((_, i) => (
+                  <LinearGradient
+                    key={i}
+                    colors={['#A855F7', '#EC4899', '#8B5CF6']}
+                    start={{ x: 0, y: 0 }}
+                    end={{ x: 1, y: 1 }}
+                    style={[
+                      styles.progressDotActive,
+                      { 
+                        transform: [
+                          { rotate: `${i * 9}deg` },
+                          { translateY: -85 }
+                        ]
+                      }
+                    ]} 
+                  />
+                ))}
+              </View>
+            )}
+
+            {/* Center Score Display */}
+            <View style={styles.centerScoreDisplay}>
+              <Text style={styles.centerScoreNumber}>
+                {primaryScore ? Math.round(primaryScore.score) : '--'}
+              </Text>
+              <Text style={styles.centerScoreUnit}>/100</Text>
+            </View>
+          </View>
+
+          {/* Description */}
+          <Text style={styles.healthScoreDescription}>
+            {primaryScore?.explanation || 'Log a test to unlock your daily readiness score'}
+          </Text>
+
+          {/* Mini Hormone Metrics */}
+          {recentTests.length > 0 && (
+            <View style={styles.miniMetricsRow}>
+              {recentTests[0].cortisol_value && (
+                <View style={styles.miniMetricChip}>
+                  <Text style={styles.miniMetricLabel}>COR</Text>
+                  <Text style={styles.miniMetricValue}>
+                    {Math.round(recentTests[0].cortisol_value * 0.9)}%
+                  </Text>
+                </View>
+              )}
+              {recentTests[0].testosterone_value && (
+                <View style={[styles.miniMetricChip, { backgroundColor: '#FEF2F2', borderColor: '#FEE2E2' }]}>
+                  <Text style={[styles.miniMetricLabel, { color: '#991B1B' }]}>TES</Text>
+                  <Text style={[styles.miniMetricValue, { color: '#DC2626' }]}>
+                    {Math.round(recentTests[0].testosterone_value * 0.85)}%
+                  </Text>
+                </View>
+              )}
+              {recentTests[0].progesterone_value && (
+                <View style={[styles.miniMetricChip, { backgroundColor: '#EFF6FF', borderColor: '#DBEAFE' }]}>
+                  <Text style={[styles.miniMetricLabel, { color: '#1E3A8A' }]}>PRO</Text>
+                  <Text style={[styles.miniMetricValue, { color: '#2563EB' }]}>
+                    {Math.round(recentTests[0].progesterone_value * 0.95)}%
+                  </Text>
+                </View>
+              )}
+              {primaryScore && (
+                <View style={[styles.miniMetricChip, { 
+                  backgroundColor: COLORS.purple100, 
+                  borderColor: COLORS.purple200,
+                  marginLeft: 'auto' 
+                }]}>
+                  <Text style={[styles.miniMetricLabel, { color: COLORS.purple700 }]}>↑</Text>
+                  <Text style={[styles.miniMetricValue, { color: COLORS.purple700 }]}>
+                    {Math.round(primaryScore.confidence)}%
+                  </Text>
+                </View>
+              )}
+            </View>
+          )}
         </View>
 
-        {/* Main Content */}
-        <ScrollView 
-          style={styles.scrollView}
-          contentContainerStyle={styles.scrollContent}
-          showsVerticalScrollIndicator={false}
-          refreshControl={
-            <RefreshControl refreshing={refreshing} onRefresh={handleRefresh} />
-          }
-        >
-          {testCount === 0 ? (
-            // Empty State
-            <View style={styles.emptyState}>
-              <Text style={styles.emptyEmoji}>🧪</Text>
-              <Text style={styles.emptyTitle}>No Tests Yet</Text>
-              <Text style={styles.emptyText}>
-                Tap the + button below to log your first hormone test
-              </Text>
-            </View>
-          ) : (
-            <>
-              {/* ReadyScore Card with Circular Progress */}
-              <View style={styles.readyScoreCard}>
-                <View style={styles.readyScoreHeader}>
-                  <Text style={styles.readyScoreTitle}>ReadyScore™</Text>
-                  <Text style={styles.sparkleIcon}>✨</Text>
-                </View>
-
-                <View style={styles.readyScoreMain}>
-                  {/* Circular Progress */}
-                  <View style={styles.circularProgress}>
-                    <Svg width={120} height={120} viewBox="0 0 120 120">
-                      {/* Background circle */}
-                      <Circle
-                        cx="60"
-                        cy="60"
-                        r="50"
-                        stroke="#f0f0f0"
-                        strokeWidth="12"
-                        fill="none"
-                      />
-                      {/* Progress circle */}
-                      <Circle
-                        cx="60"
-                        cy="60"
-                        r="50"
-                        stroke={COLORS.black}
-                        strokeWidth="12"
-                        fill="none"
-                        strokeDasharray={`${(primaryScore?.score || 0) / 100 * 314} 314`}
-                        strokeLinecap="round"
-                        rotation="-90"
-                        origin="60, 60"
-                      />
-                    </Svg>
-                    <View style={styles.scoreCenter}>
-                      <Text style={styles.scoreValue}>{Math.round(primaryScore?.score || 0)}</Text>
-                      <Text style={styles.scoreMax}>out of 100</Text>
-                    </View>
-                  </View>
-
-                  {/* Description */}
-                  <View style={styles.scoreDescription}>
-                    <Text style={styles.scoreMessage}>
-                      {primaryScore?.explanation || 'Your body is performing well today. Keep up the good habits!'}
-                    </Text>
-                    <Text style={styles.scoreUpdated}>Updated recently</Text>
-                  </View>
-                </View>
-
-                {/* Score Breakdown - Mini Cards */}
-                <View style={styles.scoreBreakdown}>
-                  {/* Physical */}
-                  <LinearGradient
-                    colors={['#DCFCE7', '#BBF7D0']}
-                    style={styles.miniScoreCard}
-                  >
-                    <Text style={styles.miniScoreLabel}>Physical</Text>
-                    <Text style={styles.miniScoreValue}>{Math.round(physicalScore?.score || 0)}</Text>
-                    <Text style={styles.miniScoreMax}>/100</Text>
-                  </LinearGradient>
-
-                  {/* Mental */}
-                  <LinearGradient
-                    colors={['#F3E8FF', '#E9D5FF']}
-                    style={styles.miniScoreCard}
-                  >
-                    <Text style={styles.miniScoreLabel}>Emotional</Text>
-                    <Text style={styles.miniScoreValue}>{Math.round(mentalScore?.score || 0)}</Text>
-                    <Text style={styles.miniScoreMax}>/100</Text>
-                  </LinearGradient>
-
-                  {/* Streak */}
-                  <LinearGradient
-                    colors={['#DBEAFE', '#BFDBFE']}
-                    style={styles.miniScoreCard}
-                  >
-                    <Text style={styles.miniScoreLabel}>Intellectual</Text>
-                    <Text style={styles.miniScoreValue}>{Math.round((primaryScore?.score || 0) * 0.85)}</Text>
-                    <Text style={styles.miniScoreMax}>/100</Text>
-                  </LinearGradient>
-                </View>
-              </View>
-
-              {/* Ask Chatbot Preview - Animated Gradient */}
-              <TouchableOpacity 
-                style={styles.askCard}
-                onPress={() => navigation.navigate('Ask')}
-                activeOpacity={0.9}
-              >
-                <LinearGradient
-                  colors={['#DBEAFE', '#F3E8FF', '#FCE7F3']}
-                  style={styles.askGradient}
-                  start={{ x: 0, y: 0 }}
-                  end={{ x: 1, y: 1 }}
+        {/* Secondary Scores - Compact Cards */}
+        {secondaryScores.length > 0 && (
+          <View style={styles.section}>
+            <Text style={styles.sectionHeading}>Related Insights</Text>
+            <View style={styles.secondaryScoresRow}>
+              {secondaryScores.map((score, index) => (
+                <View
+                  key={score.category || index}
+                  style={[
+                    styles.secondaryScoreCard,
+                    index % 2 === 0 ? styles.physicalCard : styles.mentalCard,
+                  ]}
                 >
-                  <View style={styles.askContent}>
-                    <View style={styles.askHeader}>
-                      <View style={styles.askIconCircle}>
-                        <Text style={styles.askIcon}>💬</Text>
-                      </View>
-                      <Text style={styles.askTitle}>Ask anything</Text>
-                    </View>
-                    <Text style={styles.askDescription}>
-                      Get personalized insights about your hormones and wellness
+                  {/* Icon Indicator */}
+                  <View style={styles.scoreIconCircle}>
+                    <Text style={styles.scoreIcon}>
+                      {score.category === 'physical' ? '💪' : '🧠'}
                     </Text>
-                    <View style={styles.askPreview}>
-                      <Text style={styles.askPreviewText}>
-                        "How can I improve my cortisol levels?"
-                      </Text>
-                    </View>
                   </View>
-                </LinearGradient>
-              </TouchableOpacity>
 
-              {/* Hormonal Age Section */}
-              {!bioAgeLocked && bioAgeData && (
-                <TouchableOpacity 
-                  style={styles.bioAgeCard}
-                  onPress={() => navigation.navigate('BioAge')}
-                  activeOpacity={0.9}
-                >
-                  <Text style={styles.bioAgeTitle}>Hormonal Age</Text>
-                  <View style={styles.bioAgeMain}>
-                    <View>
-                      <Text style={styles.bioAgeValue}>{Math.round(bioAgeData.bioAge)}</Text>
-                      <Text style={styles.bioAgeLabel}>years old</Text>
-                    </View>
-                    <View style={styles.bioAgeDiff}>
-                      <Text style={[
-                        styles.bioAgeDiffValue, 
-                        bioAgeData.difference < 0 ? styles.bioAgeDiffPositive : styles.bioAgeDiffNegative
-                      ]}>
-                        {bioAgeData.difference > 0 ? '+' : ''}{Math.round(bioAgeData.difference)}
-                      </Text>
-                      <Text style={styles.bioAgeDiffLabel}>vs chronological</Text>
-                    </View>
-                  </View>
-                  <View style={styles.bioAgeProgress}>
-                    <View style={styles.bioAgeProgressInfo}>
-                      <Text style={styles.bioAgeProgressLabel}>Optimal range</Text>
-                      <Text style={styles.bioAgeProgressRange}>
-                        {bioAgeData.optimalRange?.min || 20}-{bioAgeData.optimalRange?.max || 30} years
-                      </Text>
-                    </View>
-                    <View style={styles.bioAgeProgressBar}>
-                      <View style={[
-                        styles.bioAgeProgressFill, 
-                        { width: `${Math.min(100, bioAgeData.percentile || 65)}%` }
-                      ]} />
-                    </View>
-                  </View>
-                  <Text style={styles.bioAgeFooter}>
-                    {bioAgeData.interpretation || 
-                     `Your hormonal profile suggests your body is functioning ${Math.abs(Math.round(bioAgeData.difference))} years ${bioAgeData.difference < 0 ? 'younger' : 'older'} than your actual age.`}
+                  {/* Score Value */}
+                  <Text style={styles.secondaryScoreNumber}>
+                    {Math.round(score.score)}
                   </Text>
-                </TouchableOpacity>
-              )}
 
-              {/* Today's Progress Section */}
-              <View style={styles.impactCard}>
-                <View style={styles.impactHeader}>
-                  <Text style={styles.impactTitle}>Today's Progress</Text>
-                  <Text style={styles.impactProgress}>{completedToday}/12 tests</Text>
+                  {/* Label */}
+                  <Text style={styles.secondaryScoreLabel}>
+                    {score.category === 'physical' ? 'Physical' : 'Mental'}
+                  </Text>
+
+                  {/* Mini Progress Bar */}
+                  <View style={styles.miniProgressBar}>
+                    <View
+                      style={[
+                        styles.miniProgressFill,
+                        {
+                          width: `${Math.min(score.score, 100)}%`,
+                          backgroundColor: index % 2 === 0 ? '#93C5FD' : '#FCA5A5',
+                        },
+                      ]}
+                    />
+                  </View>
+
+                  {/* Message */}
+                  <Text style={styles.secondaryScoreMessage} numberOfLines={2}>
+                    {score.message}
+                  </Text>
                 </View>
-                <Text style={styles.impactDescription}>
-                  Track your testing journey to unlock all features
-                </Text>
-
-                {/* Progress Items */}
-                <View style={styles.impactItems}>
-                  {/* Test Entry */}
-                  <TouchableOpacity 
-                    style={styles.impactItem}
-                    onPress={() => navigation.navigate('SelectHormone')}
-                    activeOpacity={0.8}
-                  >
-                    <LinearGradient
-                      colors={['#EDE9FE', '#DDD6FE']}
-                      style={styles.impactIconGradient}
-                    >
-                      <Text style={styles.impactIconText}>🧪</Text>
-                    </LinearGradient>
-                    <View style={styles.impactInfo}>
-                      <View style={styles.impactTitleRow}>
-                        <Text style={styles.impactItemTitle}>Hormone Test</Text>
-                        {testCount > 0 && <Text style={styles.impactCheck}>✓</Text>}
-                      </View>
-                      <Text style={styles.impactItemSubtitle}>
-                        {testCount > 0 ? `${testCount} tests completed` : 'Add your first test'}
-                      </Text>
-                    </View>
-                  </TouchableOpacity>
-
-                  {/* ReadyScore */}
-                  <TouchableOpacity 
-                    style={styles.impactItem}
-                    onPress={() => {}}
-                    activeOpacity={0.8}
-                  >
-                    <LinearGradient
-                      colors={['#DCFCE7', '#BBF7D0']}
-                      style={styles.impactIconGradient}
-                    >
-                      <Text style={styles.impactIconText}>⚡</Text>
-                    </LinearGradient>
-                    <View style={styles.impactInfo}>
-                      <View style={styles.impactTitleRow}>
-                        <Text style={styles.impactItemTitle}>ReadyScore™</Text>
-                        {testCount > 0 && <Text style={styles.impactCheck}>✓</Text>}
-                      </View>
-                      <Text style={styles.impactItemSubtitle}>
-                        {testCount > 0 ? `${Math.round(primaryScore?.confidence || 0)}% confidence` : 'Complete a test to unlock'}
-                      </Text>
-                    </View>
-                  </TouchableOpacity>
-
-                  {/* Impact */}
-                  <TouchableOpacity 
-                    style={[styles.impactItem, impactLocked && styles.impactItemLocked]}
-                    onPress={() => !impactLocked && navigation.navigate('Impact')}
-                    disabled={impactLocked}
-                    activeOpacity={0.8}
-                  >
-                    <LinearGradient
-                      colors={impactLocked ? ['#F3F4F6', '#E5E7EB'] : ['#FED7AA', '#FDBA74']}
-                      style={styles.impactIconGradient}
-                    >
-                      <Text style={styles.impactIconText}>{impactLocked ? '🔒' : '💊'}</Text>
-                    </LinearGradient>
-                    <View style={styles.impactInfo}>
-                      <View style={styles.impactTitleRow}>
-                        <Text style={styles.impactItemTitle}>Impact™</Text>
-                        {!impactLocked && <Text style={styles.impactCheck}>✓</Text>}
-                      </View>
-                      <Text style={styles.impactItemSubtitle}>
-                        {impactLocked ? `${impactRemaining} tests left` : 'What works for you'}
-                      </Text>
-                    </View>
-                  </TouchableOpacity>
-
-                  {/* BioAge */}
-                  <TouchableOpacity 
-                    style={[styles.impactItem, bioAgeLocked && styles.impactItemLocked]}
-                    onPress={() => !bioAgeLocked && navigation.navigate('BioAge')}
-                    disabled={bioAgeLocked}
-                    activeOpacity={0.8}
-                  >
-                    <LinearGradient
-                      colors={bioAgeLocked ? ['#F3F4F6', '#E5E7EB'] : ['#BFDBFE', '#93C5FD']}
-                      style={styles.impactIconGradient}
-                    >
-                      <Text style={styles.impactIconText}>{bioAgeLocked ? '🔒' : '🧬'}</Text>
-                    </LinearGradient>
-                    <View style={styles.impactInfo}>
-                      <View style={styles.impactTitleRow}>
-                        <Text style={styles.impactItemTitle}>BioAge™</Text>
-                        {!bioAgeLocked && <Text style={styles.impactCheck}>✓</Text>}
-                      </View>
-                      <Text style={styles.impactItemSubtitle}>
-                        {bioAgeLocked ? `${bioAgeRemaining} tests left` : 'Your hormone age'}
-                      </Text>
-                    </View>
-                  </TouchableOpacity>
-
-                  {/* Streak */}
-                  <TouchableOpacity 
-                    style={styles.impactItem}
-                    onPress={() => {}}
-                    activeOpacity={0.8}
-                  >
-                    <LinearGradient
-                      colors={['#FCE7F3', '#FBCFE8']}
-                      style={styles.impactIconGradient}
-                    >
-                      <Text style={styles.impactIconText}>🔥</Text>
-                    </LinearGradient>
-                    <View style={styles.impactInfo}>
-                      <View style={styles.impactTitleRow}>
-                        <Text style={styles.impactItemTitle}>Streak</Text>
-                        {streak > 0 && <Text style={styles.impactCheck}>✓</Text>}
-                      </View>
-                      <Text style={styles.impactItemSubtitle}>
-                        {streak > 0 ? `${streak} day streak` : 'Start your streak'}
-                      </Text>
-                    </View>
-                  </TouchableOpacity>
-                </View>
-              </View>
-            </>
-          )}
-        </ScrollView>
-
-        {/* Bottom Navigation Bar */}
-        <View style={styles.bottomNav}>
-          <TouchableOpacity 
-            style={styles.navButton}
-            onPress={() => {}}
-          >
-            <Text style={styles.navIcon}>🏠</Text>
-            <Text style={styles.navLabel}>Home</Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity 
-            style={styles.fabButton}
-            onPress={handleAddTest}
-            activeOpacity={0.85}
-          >
-            <View style={styles.fabCircle}>
-              <Text style={styles.fabIcon}>+</Text>
+              ))}
             </View>
-          </TouchableOpacity>
+          </View>
+        )}
+                
+                {/* Compact Mobile Dashboard */}
+                <View style={styles.content}>
+                  {/* Quick Stats Row */}
+                  <View style={styles.section}>
+                    <Text style={styles.sectionHeading}>Quick Stats</Text>
+                    <View style={styles.quickStatsRow}>
+                      {/* Streak */}
+                      <View style={styles.quickStatCard}>
+                        <Text style={styles.quickStatEmoji}>🔥</Text>
+                        <Text style={styles.quickStatValue}>{streakData?.streak || 0}</Text>
+                        <Text style={styles.quickStatLabel}>day streak</Text>
+                      </View>
 
-          <TouchableOpacity 
-            style={styles.navButton}
-            onPress={() => navigation.navigate('Impact')}
-          >
-            <Text style={styles.navIcon}>📋</Text>
-            <Text style={styles.navLabel}>Plans</Text>
-          </TouchableOpacity>
+                      {/* Tests */}
+                      <View style={styles.quickStatCard}>
+                        <Text style={styles.quickStatEmoji}>✅</Text>
+                        <Text style={styles.quickStatValue}>{testCount}</Text>
+                        <Text style={styles.quickStatLabel}>tests</Text>
+                      </View>
+
+                      {/* Days Since Last */}
+                      <View style={styles.quickStatCard}>
+                        <Text style={styles.quickStatEmoji}>📅</Text>
+                        <Text style={styles.quickStatValue}>
+                          {daysSinceLast === 0 ? 'Today' : daysSinceLast || '--'}
+                        </Text>
+                        <Text style={styles.quickStatLabel}>
+                          {daysSinceLast === 0 ? '' : daysSinceLast === 1 ? 'day ago' : 'days ago'}
+                        </Text>
+                      </View>
+                    </View>
+                  </View>
+
+                  {/* Feature Tools - Compact Cards */}
+                  <View style={styles.section}>
+                    <Text style={styles.sectionHeading}>Explore Tools</Text>
+                    <View style={styles.toolsGrid}>
+                      {/* Impact */}
+                      <TouchableOpacity
+                        style={[styles.toolCard, impactLocked && styles.toolCardLocked]}
+                        onPress={() => navigation.navigate('Impact')}
+                        activeOpacity={0.7}
+                      >
+                        <View style={styles.toolIconContainer}>
+                          <Text style={styles.toolIcon}>{impactLocked ? '🔒' : '💊'}</Text>
+                        </View>
+                        <Text style={styles.toolTitle}>Impact™</Text>
+                        <Text style={styles.toolSubtitle} numberOfLines={2}>
+                          {impactLocked 
+                            ? `${impactRemaining} test${impactRemaining === 1 ? '' : 's'} left`
+                            : 'What works for you'}
+                        </Text>
+                      </TouchableOpacity>
+
+                      {/* BioAge */}
+                      <TouchableOpacity
+                        style={[styles.toolCard, bioAgeLocked && styles.toolCardLocked]}
+                        onPress={() => navigation.navigate('BioAge')}
+                        activeOpacity={0.7}
+                      >
+                        <View style={styles.toolIconContainer}>
+                          <Text style={styles.toolIcon}>{bioAgeLocked ? '🔒' : '🧬'}</Text>
+                        </View>
+                        <Text style={styles.toolTitle}>BioAge™</Text>
+                        <Text style={styles.toolSubtitle} numberOfLines={2}>
+                          {bioAgeLocked 
+                            ? `${bioAgeRemaining} test${bioAgeRemaining === 1 ? '' : 's'} left`
+                            : 'Your hormone age'}
+                        </Text>
+                      </TouchableOpacity>
+
+                      {/* Ask */}
+                      <TouchableOpacity
+                        style={styles.toolCard}
+                        onPress={() => navigation.navigate('Ask')}
+                        activeOpacity={0.7}
+                      >
+                        <View style={styles.toolIconContainer}>
+                          <Text style={styles.toolIcon}>🤖</Text>
+                        </View>
+                        <Text style={styles.toolTitle}>Ask™</Text>
+                        <Text style={styles.toolSubtitle} numberOfLines={2}>
+                          AI hormone coach
+                        </Text>
+                      </TouchableOpacity>
+                    </View>
+                  </View>
+                </View>
+              </>
+            )}
+          </ScrollView>
+
+          {/* Floating Action Button */}
+          <FloatingButton onPress={handleAddTest} />
         </View>
       </SafeAreaView>
-    </View>
+    </LinearGradient>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
+  gradientBackground: {
     flex: 1,
-    backgroundColor: COLORS.white,
-  },
-  // Decorative Blur Circles
-  decorativeCircle1: {
-    position: 'absolute',
-    top: 80,
-    right: 40,
-    width: 80,
-    height: 80,
-    borderRadius: 40,
-    backgroundColor: '#FDE047',
-    opacity: 0.6,
-  },
-  decorativeCircle2: {
-    position: 'absolute',
-    top: 64,
-    right: 96,
-    width: 64,
-    height: 64,
-    borderRadius: 32,
-    backgroundColor: '#93C5FD',
-    opacity: 0.6,
-  },
-  decorativeCircle3: {
-    position: 'absolute',
-    top: 128,
-    right: 16,
-    width: 96,
-    height: 96,
-    borderRadius: 48,
-    backgroundColor: '#C4B5FD',
-    opacity: 0.6,
-  },
-  decorativeCircle4: {
-    position: 'absolute',
-    top: 96,
-    right: 160,
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    backgroundColor: '#BBF7D0',
-    opacity: 0.6,
-  },
-  decorativeCircle5: {
-    position: 'absolute',
-    top: 160,
-    right: 80,
-    width: 64,
-    height: 64,
-    borderRadius: 32,
-    backgroundColor: '#DDD6FE',
-    opacity: 0.6,
   },
   safeArea: {
     flex: 1,
+    backgroundColor: 'transparent',
   },
-  // Header
+  container: {
+    flex: 1,
+    backgroundColor: 'transparent',
+  },
   header: {
+    paddingHorizontal: SPACING.lg,
+    paddingTop: SPACING.lg,
+    paddingBottom: SPACING.md,
+  },
+  headerContent: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingHorizontal: SPACING.lg,
-    paddingVertical: SPACING.md,
-    zIndex: 10,
   },
-  welcomeText: {
-    fontSize: 30,
+  headerLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: SPACING.sm,
+  },
+  settingsButton: {
+    padding: SPACING.xs,
+  },
+  settingsIcon: {
+    fontSize: 24,
+  },
+  greeting: {
+    fontSize: TYPOGRAPHY.sm,
+    color: COLORS.textSecondary,
+    marginBottom: SPACING.xs / 4,
+  },
+  appTitle: {
+    fontSize: TYPOGRAPHY.base,
     fontWeight: TYPOGRAPHY.bold,
     color: COLORS.textPrimary,
-  },
-  welcomeName: {
-    fontSize: 30,
-    fontWeight: TYPOGRAPHY.bold,
-    color: COLORS.textPrimary,
-  },
-  // ScrollView
-  scrollView: {
-    flex: 1,
   },
   scrollContent: {
-    paddingHorizontal: SPACING.lg,
-    paddingBottom: 100,
+    flexGrow: 1,
+    paddingBottom: 120,
+    gap: SPACING.lg,
   },
-  // Empty State
   emptyState: {
-    alignItems: 'center',
+    flex: 1,
     justifyContent: 'center',
-    paddingVertical: SPACING.xl * 3,
+    alignItems: 'center',
+    paddingVertical: SPACING.xxl * 2,
   },
   emptyEmoji: {
     fontSize: 64,
-    marginBottom: SPACING.md,
+    marginBottom: SPACING.lg,
   },
   emptyTitle: {
     fontSize: TYPOGRAPHY.xl,
-    fontWeight: TYPOGRAPHY.bold,
+    fontWeight: TYPOGRAPHY.semibold,
     color: COLORS.textPrimary,
     marginBottom: SPACING.sm,
   },
@@ -601,344 +512,291 @@ const styles = StyleSheet.create({
     color: COLORS.textSecondary,
     textAlign: 'center',
     maxWidth: 280,
+    lineHeight: 24,
   },
-  // ReadyScore Card
-  readyScoreCard: {
+  // Main ReadyScore Card - Minimal & Elegant
+  // Health Score Card - Option 1 Tech Health Design
+  healthScoreCard: {
+    marginHorizontal: SPACING.md,
+    marginBottom: SPACING.lg,
     backgroundColor: COLORS.white,
     borderRadius: BORDER_RADIUS.xl,
     padding: SPACING.lg,
-    marginBottom: SPACING.md,
-    ...SHADOWS.sm,
+    ...SHADOWS.lg,
+    overflow: 'hidden',
   },
-  readyScoreHeader: {
+  healthScoreHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: SPACING.md,
-  },
-  readyScoreTitle: {
-    fontSize: TYPOGRAPHY.lg,
-    fontWeight: TYPOGRAPHY.medium,
-    color: COLORS.textPrimary,
-  },
-  sparkleIcon: {
-    fontSize: 20,
-  },
-  readyScoreMain: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: SPACING.lg,
     marginBottom: SPACING.lg,
   },
-  circularProgress: {
-    position: 'relative',
-    width: 120,
-    height: 120,
-  },
-  scoreCenter: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  scoreValue: {
-    fontSize: 36,
-    fontWeight: TYPOGRAPHY.bold,
-    color: COLORS.textPrimary,
-  },
-  scoreMax: {
-    fontSize: TYPOGRAPHY.xs,
-    color: COLORS.textSecondary,
-  },
-  scoreDescription: {
-    flex: 1,
-  },
-  scoreMessage: {
-    fontSize: TYPOGRAPHY.sm,
-    color: COLORS.textSecondary,
-    marginBottom: SPACING.xs,
-    lineHeight: 20,
-  },
-  scoreUpdated: {
-    fontSize: 11,
-    color: COLORS.textTertiary,
-  },
-  scoreBreakdown: {
+  healthScoreTitle: {
     flexDirection: 'row',
+    alignItems: 'center',
     gap: SPACING.xs,
   },
-  miniScoreCard: {
-    flex: 1,
-    borderRadius: BORDER_RADIUS.md,
-    padding: SPACING.sm,
+  activityIcon: {
+    fontSize: 20,
   },
-  miniScoreLabel: {
+  healthScoreTitleText: {
+    fontSize: TYPOGRAPHY.lg,
+    fontWeight: TYPOGRAPHY.semibold,
+    color: COLORS.textPrimary,
+  },
+  statusBadge: {
+    paddingHorizontal: SPACING.sm,
+    paddingVertical: SPACING.xs / 2,
+    borderRadius: BORDER_RADIUS.full,
+  },
+  statusBadgeText: {
+    fontSize: TYPOGRAPHY.xs,
+    fontWeight: TYPOGRAPHY.semibold,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  circularProgressContainer: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    height: 200,
+    marginBottom: SPACING.md,
+    position: 'relative',
+  },
+  progressRingBackground: {
+    position: 'absolute',
+    width: 180,
+    height: 180,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  progressDot: {
+    position: 'absolute',
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: '#E5E7EB',
+  },
+  progressRingForeground: {
+    position: 'absolute',
+    width: 180,
+    height: 180,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  progressDotActive: {
+    position: 'absolute',
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+  },
+  centerScoreDisplay: {
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  centerScoreNumber: {
+    fontSize: 64,
+    fontWeight: TYPOGRAPHY.bold,
+    color: COLORS.textPrimary,
+    lineHeight: 64,
+    letterSpacing: -2,
+  },
+  centerScoreUnit: {
+    fontSize: TYPOGRAPHY.sm,
+    fontWeight: TYPOGRAPHY.medium,
+    color: COLORS.textTertiary,
+    marginTop: -4,
+  },
+  healthScoreDescription: {
+    fontSize: TYPOGRAPHY.sm,
+    color: COLORS.textSecondary,
+    textAlign: 'center',
+    lineHeight: TYPOGRAPHY.lineHeight.normal * TYPOGRAPHY.sm,
+    marginBottom: SPACING.md,
+    paddingHorizontal: SPACING.sm,
+  },
+  miniMetricsRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: SPACING.xs,
+    alignItems: 'center',
+  },
+  miniMetricChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: SPACING.sm,
+    paddingVertical: SPACING.xs / 2,
+    backgroundColor: '#F5F3FF',
+    borderWidth: 1,
+    borderColor: '#DDD6FE',
+    borderRadius: BORDER_RADIUS.sm,
+  },
+  miniMetricLabel: {
     fontSize: 10,
     fontWeight: TYPOGRAPHY.medium,
-    color: COLORS.textSecondary,
-    marginBottom: 2,
+    color: COLORS.purple700,
   },
-  miniScoreValue: {
+  miniMetricValue: {
+    fontSize: TYPOGRAPHY.xs,
+    fontWeight: TYPOGRAPHY.semibold,
+    color: COLORS.purple600,
+  },
+  section: {
+    gap: SPACING.sm,
+    marginHorizontal: SPACING.md,
+  },
+  sectionHeading: {
+    fontSize: TYPOGRAPHY.base,
+    fontWeight: TYPOGRAPHY.bold,
+    color: COLORS.textPrimary,
+    marginBottom: SPACING.xs,
+  },
+  // Secondary Score Cards - Soft Minimal Design
+  secondaryScoresRow: {
+    flexDirection: 'row',
+    gap: SPACING.sm,
+  },
+  secondaryScoreCard: {
+    flex: 1,
+    backgroundColor: COLORS.white,
+    borderRadius: BORDER_RADIUS.lg,
+    padding: SPACING.lg,
+    alignItems: 'center',
+    ...SHADOWS.sm,
+  },
+  physicalCard: {
+    borderLeftWidth: 3,
+    borderLeftColor: '#93C5FD', // Soft blue
+  },
+  mentalCard: {
+    borderLeftWidth: 3,
+    borderLeftColor: '#FCA5A5', // Soft red/pink
+  },
+  scoreIconCircle: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: COLORS.purple50,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: SPACING.sm,
+  },
+  scoreIcon: {
+    fontSize: 24,
+  },
+  secondaryScoreNumber: {
+    fontSize: TYPOGRAPHY.xxxl,
+    fontWeight: TYPOGRAPHY.bold,
+    color: COLORS.textPrimary,
+    marginBottom: SPACING.xs / 2,
+  },
+  secondaryScoreLabel: {
+    fontSize: TYPOGRAPHY.xs,
+    fontWeight: TYPOGRAPHY.semibold,
+    color: COLORS.textSecondary,
+    textTransform: 'uppercase',
+    letterSpacing: TYPOGRAPHY.letterSpacing.wide,
+    marginBottom: SPACING.sm,
+  },
+  miniProgressBar: {
+    width: '100%',
+    height: 4,
+    backgroundColor: COLORS.background,
+    borderRadius: BORDER_RADIUS.full,
+    overflow: 'hidden',
+    marginBottom: SPACING.sm,
+  },
+  miniProgressFill: {
+    height: '100%',
+    borderRadius: BORDER_RADIUS.full,
+  },
+  secondaryScoreMessage: {
+    fontSize: TYPOGRAPHY.xs,
+    color: COLORS.textSecondary,
+    textAlign: 'center',
+    lineHeight: 16,
+  },
+  secondaryScorePlaceholder: {
+    fontSize: TYPOGRAPHY.sm,
+    color: COLORS.textTertiary,
+    textAlign: 'center',
+    lineHeight: 20,
+  },
+  content: {
+    gap: SPACING.lg,
+    marginTop: SPACING.md,
+  },
+  // Quick Stats Row - Compact Mobile Design
+  quickStatsRow: {
+    flexDirection: 'row',
+    gap: SPACING.sm,
+  },
+  quickStatCard: {
+    flex: 1,
+    backgroundColor: COLORS.white,
+    borderRadius: BORDER_RADIUS.lg,
+    padding: SPACING.md,
+    alignItems: 'center',
+    justifyContent: 'center',
+    ...SHADOWS.sm,
+    minHeight: 100,
+  },
+  quickStatEmoji: {
+    fontSize: 28,
+    marginBottom: SPACING.xs,
+  },
+  quickStatValue: {
     fontSize: TYPOGRAPHY.xl,
     fontWeight: TYPOGRAPHY.bold,
     color: COLORS.textPrimary,
-  },
-  miniScoreMax: {
-    fontSize: 10,
-    color: COLORS.textSecondary,
-  },
-  // Ask Card
-  askCard: {
-    borderRadius: BORDER_RADIUS.xl,
-    marginBottom: SPACING.md,
-    overflow: 'hidden',
-    ...SHADOWS.sm,
-  },
-  askGradient: {
-    padding: SPACING.lg,
-  },
-  askContent: {
-    zIndex: 10,
-  },
-  askHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: SPACING.sm,
-    marginBottom: SPACING.sm,
-  },
-  askIconCircle: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: COLORS.black,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  askIcon: {
-    fontSize: 20,
-  },
-  askTitle: {
-    fontSize: TYPOGRAPHY.lg,
-    fontWeight: TYPOGRAPHY.medium,
-    color: COLORS.textPrimary,
-  },
-  askDescription: {
-    fontSize: TYPOGRAPHY.sm,
-    color: COLORS.textSecondary,
-    marginBottom: SPACING.md,
-    lineHeight: 20,
-  },
-  askPreview: {
-    backgroundColor: COLORS.white,
-    borderRadius: BORDER_RADIUS.md,
-    padding: SPACING.sm,
-  },
-  askPreviewText: {
-    fontSize: TYPOGRAPHY.sm,
-    color: COLORS.textTertiary,
-  },
-  // BioAge Card
-  bioAgeCard: {
-    backgroundColor: COLORS.white,
-    borderRadius: BORDER_RADIUS.xl,
-    padding: SPACING.lg,
-    marginBottom: SPACING.md,
-    ...SHADOWS.sm,
-  },
-  bioAgeTitle: {
-    fontSize: TYPOGRAPHY.lg,
-    fontWeight: TYPOGRAPHY.medium,
-    color: COLORS.textPrimary,
-    marginBottom: SPACING.md,
-  },
-  bioAgeMain: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-end',
-    marginBottom: SPACING.md,
-  },
-  bioAgeValue: {
-    fontSize: 48,
-    fontWeight: TYPOGRAPHY.bold,
-    color: COLORS.textPrimary,
-    lineHeight: 48,
-  },
-  bioAgeLabel: {
-    fontSize: TYPOGRAPHY.sm,
-    color: COLORS.textSecondary,
-  },
-  bioAgeDiff: {
-    alignItems: 'flex-end',
-  },
-  bioAgeDiffValue: {
-    fontSize: TYPOGRAPHY.xxl,
-    fontWeight: TYPOGRAPHY.semibold,
-  },
-  bioAgeDiffPositive: {
-    color: COLORS.success,
-  },
-  bioAgeDiffNegative: {
-    color: COLORS.error,
-  },
-  bioAgeDiffLabel: {
-    fontSize: TYPOGRAPHY.xs,
-    color: COLORS.textSecondary,
-  },
-  bioAgeProgress: {
-    backgroundColor: COLORS.background,
-    borderRadius: BORDER_RADIUS.md,
-    padding: SPACING.md,
-    marginBottom: SPACING.sm,
-  },
-  bioAgeProgressInfo: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginBottom: SPACING.xs,
-  },
-  bioAgeProgressLabel: {
-    fontSize: TYPOGRAPHY.xs,
-    color: COLORS.textSecondary,
-  },
-  bioAgeProgressRange: {
-    fontSize: TYPOGRAPHY.xs,
-    fontWeight: TYPOGRAPHY.semibold,
-    color: COLORS.textPrimary,
-  },
-  bioAgeProgressBar: {
-    width: '100%',
-    height: 8,
-    backgroundColor: '#E5E7EB',
-    borderRadius: BORDER_RADIUS.full,
-    overflow: 'hidden',
-  },
-  bioAgeProgressFill: {
-    height: '100%',
-    backgroundColor: COLORS.success,
-    borderRadius: BORDER_RADIUS.full,
-  },
-  bioAgeFooter: {
-    fontSize: TYPOGRAPHY.xs,
-    color: COLORS.textSecondary,
-    lineHeight: 18,
-  },
-  // Impact Card
-  impactCard: {
-    backgroundColor: COLORS.white,
-    borderRadius: BORDER_RADIUS.xl,
-    padding: SPACING.lg,
-    ...SHADOWS.sm,
-  },
-  impactHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: SPACING.xs,
-  },
-  impactTitle: {
-    fontSize: TYPOGRAPHY.lg,
-    fontWeight: TYPOGRAPHY.medium,
-    color: COLORS.textPrimary,
-  },
-  impactProgress: {
-    fontSize: TYPOGRAPHY.sm,
-    color: COLORS.textSecondary,
-  },
-  impactDescription: {
-    fontSize: TYPOGRAPHY.xs,
-    color: COLORS.textSecondary,
-    marginBottom: SPACING.md,
-  },
-  impactItems: {
-    gap: SPACING.sm,
-  },
-  impactItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: SPACING.sm,
-    padding: SPACING.sm,
-    borderRadius: BORDER_RADIUS.lg,
-    backgroundColor: COLORS.background,
-  },
-  impactItemLocked: {
-    opacity: 0.6,
-  },
-  impactIconGradient: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  impactIconText: {
-    fontSize: 20,
-  },
-  impactInfo: {
-    flex: 1,
-  },
-  impactTitleRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
+    lineHeight: TYPOGRAPHY.xl,
     marginBottom: 2,
   },
-  impactItemTitle: {
-    fontSize: TYPOGRAPHY.sm,
-    fontWeight: TYPOGRAPHY.semibold,
-    color: COLORS.textPrimary,
-  },
-  impactCheck: {
-    fontSize: 18,
-    color: COLORS.success,
-  },
-  impactItemSubtitle: {
+  quickStatLabel: {
     fontSize: TYPOGRAPHY.xs,
+    fontWeight: TYPOGRAPHY.medium,
     color: COLORS.textSecondary,
+    textAlign: 'center',
   },
-  // Bottom Navigation
-  bottomNav: {
-    position: 'absolute',
-    bottom: 0,
-    left: 0,
-    right: 0,
-    backgroundColor: COLORS.white,
-    borderTopWidth: 1,
-    borderTopColor: COLORS.border,
+  // Tools Grid - Compact Card Design
+  toolsGrid: {
     flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-around',
-    paddingVertical: SPACING.sm,
-    paddingHorizontal: SPACING.lg,
-    zIndex: 50,
+    flexWrap: 'wrap',
+    gap: SPACING.sm,
   },
-  navButton: {
-    alignItems: 'center',
+  toolCard: {
+    width: (SCREEN_WIDTH - (SPACING.md * 2) - SPACING.sm) / 2,
+    backgroundColor: COLORS.white,
+    borderRadius: BORDER_RADIUS.lg,
+    padding: SPACING.md,
+    ...SHADOWS.sm,
+    minHeight: 130,
   },
-  navIcon: {
+  toolCardLocked: {
+    opacity: 0.6,
+  },
+  toolIconContainer: {
+    width: 48,
+    height: 48,
+    borderRadius: BORDER_RADIUS.full,
+    backgroundColor: COLORS.purple50,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: SPACING.sm,
+  },
+  toolIcon: {
     fontSize: 24,
   },
-  navLabel: {
-    fontSize: TYPOGRAPHY.xs,
-    marginTop: 4,
+  toolTitle: {
+    fontSize: TYPOGRAPHY.base,
+    fontWeight: TYPOGRAPHY.semibold,
     color: COLORS.textPrimary,
+    marginBottom: SPACING.xs / 2,
   },
-  fabButton: {
-    marginTop: -24,
-  },
-  fabCircle: {
-    width: 56,
-    height: 56,
-    backgroundColor: COLORS.black,
-    borderRadius: 28,
-    justifyContent: 'center',
-    alignItems: 'center',
-    ...SHADOWS.lg,
-  },
-  fabIcon: {
-    color: COLORS.white,
-    fontSize: 32,
-    fontWeight: '300',
+  toolSubtitle: {
+    fontSize: TYPOGRAPHY.xs,
+    color: COLORS.textSecondary,
+    lineHeight: 16,
   },
 });
+
