@@ -1,7 +1,20 @@
-import React from 'react';
-import { HomeIcon, PlusIcon, FileTextIcon, MessageSquareIcon, SparklesIcon, MoonIcon, ActivityIcon, DropletIcon, BrainIcon, UtensilsIcon, CheckCircle2Icon } from 'lucide-react';
+import React from 'react'
+import {
+  HomeIcon,
+  PlusIcon,
+  FileTextIcon,
+  MessageSquareIcon,
+  SparklesIcon,
+  MoonIcon,
+  ActivityIcon,
+  DropletIcon,
+  BrainIcon,
+  UtensilsIcon,
+  CheckCircle2Icon,
+} from 'lucide-react'
 export function HomePage() {
-  return <div className="w-full min-h-screen bg-white relative overflow-hidden pb-24">
+  return (
+    <div className="w-full min-h-screen bg-white relative overflow-hidden pb-24">
       {/* Decorative blurred circles */}
       <div className="absolute top-20 right-10 w-20 h-20 rounded-full bg-yellow-300 blur-2xl opacity-60"></div>
       <div className="absolute top-16 right-24 w-16 h-16 rounded-full bg-blue-300 blur-2xl opacity-60"></div>
@@ -14,7 +27,11 @@ export function HomePage() {
           <h1 className="text-3xl font-bold">Welcome back,</h1>
           <h2 className="text-3xl font-bold">Eli</h2>
         </div>
-        <img src="/eli3.webp" alt="Profile" className="w-12 h-12 rounded-full object-cover" />
+        <img
+          src="https://uploadthingy.s3.us-west-1.amazonaws.com/s5r7uE4Rtenuz1GxLk8xnQ/eli3.webp"
+          alt="Profile"
+          className="w-12 h-12 rounded-full object-cover"
+        />
       </div>
       {/* ReadyScore Card */}
       <div className="mx-6 mb-4 bg-white rounded-2xl p-6 shadow-sm relative z-10">
@@ -27,9 +44,25 @@ export function HomePage() {
           <div className="relative w-32 h-32">
             <svg className="w-32 h-32 -rotate-90" viewBox="0 0 120 120">
               {/* Background circle */}
-              <circle cx="60" cy="60" r="50" stroke="#f0f0f0" strokeWidth="12" fill="none" />
+              <circle
+                cx="60"
+                cy="60"
+                r="50"
+                stroke="#f0f0f0"
+                strokeWidth="12"
+                fill="none"
+              />
               {/* Progress circle */}
-              <circle cx="60" cy="60" r="50" stroke="#000" strokeWidth="12" fill="none" strokeDasharray={`${68 / 100 * 314} 314`} strokeLinecap="round" />
+              <circle
+                cx="60"
+                cy="60"
+                r="50"
+                stroke="#000"
+                strokeWidth="12"
+                fill="none"
+                strokeDasharray={`${(68 / 100) * 314} 314`}
+                strokeLinecap="round"
+              />
             </svg>
             <div className="absolute inset-0 flex items-center justify-center">
               <div className="text-center">
@@ -76,11 +109,15 @@ export function HomePage() {
       </div>
       {/* Ask Chatbot Preview */}
       <div className="mx-6 mb-4 bg-gradient-to-br from-blue-50 via-purple-50 to-pink-50 rounded-2xl p-6 shadow-sm relative z-10 overflow-hidden">
-        <div className="absolute inset-0 opacity-50" style={{
-        background: 'linear-gradient(45deg, #dbeafe, #f3e8ff, #fce7f3, #dbeafe)',
-        backgroundSize: '400% 400%',
-        animation: 'gradientShift 15s ease infinite'
-      }}></div>
+        <div
+          className="absolute inset-0 opacity-50"
+          style={{
+            background:
+              'linear-gradient(45deg, #dbeafe, #f3e8ff, #fce7f3, #dbeafe)',
+            backgroundSize: '400% 400%',
+            animation: 'gradientShift 15s ease infinite',
+          }}
+        ></div>
         <style>
           {`
             @keyframes gradientShift {
@@ -132,9 +169,12 @@ export function HomePage() {
             <span className="text-xs font-medium">20-26 years</span>
           </div>
           <div className="w-full h-2 bg-gray-200 rounded-full overflow-hidden">
-            <div className="h-full bg-gradient-to-r from-green-400 to-green-600 rounded-full" style={{
-            width: '65%'
-          }}></div>
+            <div
+              className="h-full bg-gradient-to-r from-green-400 to-green-600 rounded-full"
+              style={{
+                width: '65%',
+              }}
+            ></div>
           </div>
         </div>
         <p className="text-xs text-gray-500 mt-3">
@@ -238,5 +278,6 @@ export function HomePage() {
           <span className="text-xs mt-1">Plans</span>
         </button>
       </div>
-    </div>;
+    </div>
+  )
 }
