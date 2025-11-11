@@ -167,8 +167,9 @@ export default function DashboardScreen({ navigation }) {
                 </Text>
               </View>
             ) : (
-  {/* Health Score Card - Option 1 Tech Health Design */}
-        <View style={styles.healthScoreCard}>
+              <>
+                {/* Health Score Card - Option 1 Tech Health Design */}
+                <View style={styles.healthScoreCard}>
           {/* Header with Title and Status Badge */}
           <View style={styles.healthScoreHeader}>
             <View style={styles.healthScoreTitle}>
